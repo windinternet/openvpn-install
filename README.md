@@ -1,24 +1,23 @@
-**New: [wireguard-install](https://github.com/Nyr/wireguard-install) is also available.**
+## 说明
 
-## openvpn-install
-OpenVPN [road warrior](http://en.wikipedia.org/wiki/Road_warrior_%28computing%29) installer for Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora.
+本仓库Fork自Nyr/openvpn-install，仅仅是在此基础之上，进行了本土化改造，更符合国内使用习惯和网络环境！如果觉得不错，请给原仓库Star！
 
-This script will let you set up your own VPN server in no more than a minute, even if you haven't used OpenVPN before. It has been designed to be as unobtrusive and universal as possible.
+## 目标
+本脚本的初衷就是为了给大家提供一个简单的OpenVPN按安装及使用体验，及时你没有任何相关的安装和使用经验。
 
-### Installation
-Run the script and follow the assistant:
+## 安装
+直接复制一下shell命令，并执行即可:
 
 `wget https://git.io/vpn -O openvpn-install.sh && bash openvpn-install.sh`
 
-Once it ends, you can run it again to add more users, remove some of them or even completely uninstall OpenVPN.
+运行一次即可安装完成，后续再次运行此脚本即可打开管理菜单，进行添加、删除用户以及卸载。
 
-### I want to run my own VPN but don't have a server for that
-You can get a VPS from just [2 EUR](https://alphavps.com/clients/aff.php?aff=474&pid=457&currency=1) or [2 USD](https://alphavps.com/clients/aff.php?aff=474&pid=457&currency=6) per month at [AlphaVPS](https://alphavps.com/clients/aff.php?aff=474&pid=457&currency=1).
+## 感谢
+再次感谢Nyr开源的安装脚本！
 
-### Donations
-If you want to show your appreciation, you can donate via [PayPal](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=VBAYDL34Z7J6L) or [cryptocurrency](https://pastebin.com/raw/M2JJpQpC). Thanks!
+## 改进
+以下是根据个人需要和喜好进行的额外改造：
+* 支持为每个用户固定分配IP地址
 
-### Sponsors
-This project is proudly sponsored by our friends at [FrogeHost](https://froge.host/?utm_source=nyr).
-
-For a commercial VPN with strong anti-censorship capabilities (最强翻墙VPN) from $1/month, check out [Clever VPN](https://www.clever-vpn.net/?wg-referral=01LOULuQoi).
+## 什么时候用Open VPN？
+ VPN（专用虚拟网络），当你有专用组网需求时，就可以使用本脚本，安装Open VPN服务端创建用户并分发。例如：公司有若干服务器，上面存放或部署了多个公司服务，并且这些服务是不直接对公网开放的，当你在家需要访问这些服务时，就需要跟这些服务处于同一个网络才可以，就可以借助VPN，给内网和自己颁发Open VPN用户，都连接到服务器，然后使用Open VPN分配的IP地址（通常是10.8.0.xxx/16）进行通信即可，祝你使用愉快！
