@@ -10,10 +10,10 @@ if readlink /proc/$$/exe | grep -q "dash"; then
     exit
 fi
 
-# 丢弃标准输入（处理包含换行符的单行命令）
+# 丢弃标准输入
 read -N 999999 -t 0.001
 
-# 检测操作系统
+# 检测操作系统（保持不变）
 if grep -qs "ubuntu" /etc/os-release; then
     os="ubuntu"
     os_version=$(grep 'VERSION_ID' /etc/os-release | cut -d '"' -f 2 | tr -d '.')
@@ -36,7 +36,7 @@ else
     exit
 fi
 
-# 检查操作系统版本
+# 检查操作系统版本（保持不变）
 if [[ "$os" == "ubuntu" && "$os_version" -lt 2204 ]]; then
     echo "此安装脚本需要 Ubuntu 22.04 或更高版本。
 当前 Ubuntu 版本太旧且不受支持。"
@@ -62,19 +62,17 @@ if [[ "$os" == "centos" && "$os_version" -lt 9 ]]; then
     exit
 fi
 
-# 检查 $PATH 是否包含 sbin 目录
+# 检查 $PATH、root 权限和 TUN 设备（保持不变）
 if ! grep -q sbin <<< "$PATH"; then
     echo '$PATH 不包含 sbin。尝试使用 "su -" 而不是 "su"。'
     exit
 fi
 
-# 检查是否以 root 权限运行
 if [[ "$EUID" -ne 0 ]]; then
     echo "此安装脚本需要以超级用户权限运行。"
     exit
 fi
 
-# 检查 TUN 设备是否可用
 if [[ ! -e /dev/net/tun ]] || ! ( exec 7<>/dev/net/tun ) 2>/dev/null; then
     echo "系统中没有可用的 TUN 设备。
 在运行此安装脚本之前需要启用 TUN。"
@@ -101,7 +99,7 @@ new_client () {
 }
 
 if [[ ! -e /etc/openvpn/server/server.conf ]]; then
-    # 检查是否安装 wget 或 curl
+    # 检查并安装 wget
     if ! hash wget 2>/dev/null && ! hash curl 2>/dev/null; then
         echo "此安装脚本需要 Wget。"
         read -n1 -r -p "按任意键安装 Wget 并继续..."
@@ -110,7 +108,7 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
     fi
     clear
     echo '欢迎使用 OpenVPN 安装脚本！'
-    # 自动选择单个 IPv4 或提示用户选择
+    # 选择 IPv4
     if [[ $(ip -4 addr | grep inet | grep -vEc '127(\.[0-9]{1,3}){3}') -eq 1 ]]; then
         ip=$(ip -4 addr | grep inet | grep -vE '127(\.[0-9]{1,3}){3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}')
     else
@@ -126,7 +124,7 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
         [[ -z "$ip_number" ]] && ip_number="1"
         ip=$(ip -4 addr | grep inet | grep -vE '127(\.[0-9]{1,3}){3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | sed -n "$ip_number"p)
     fi
-    # 如果是私有 IP，提示输入公网 IP 或主机名
+    # 处理 NAT 情况
     if echo "$ip" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
         echo
         echo "此服务器位于 NAT 后面。请输入公网 IPv4 地址或主机名："
@@ -138,7 +136,7 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
         done
         [[ -z "$public_ip" ]] && public_ip="$get_public_ip"
     fi
-    # 自动选择单个 IPv6 或提示用户选择
+    # 选择 IPv6
     if [[ $(ip -6 addr | grep -c 'inet6 [23]') -eq 1 ]]; then
         ip6=$(ip -6 addr | grep 'inet6 [23]' | cut -d '/' -f 1 | grep -oE '([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}')
     fi
@@ -198,6 +196,15 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
     read -p "名称 [client]: " unsanitized_client
     client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
     [[ -z "$client" ]] && client="client"
+    # 提示用户为第一个客户端指定固定 IP
+    echo
+    echo "请输入 $client 的固定 IP 地址（范围: 10.8.0.2 - 10.8.0.254）："
+    read -p "固定 IP [10.8.0.2]: " client_ip
+    until [[ -z "$client_ip" || "$client_ip" =~ ^10\.8\.0\.(2[0-4][0-9]|25[0-4]|[3-9][0-9]|[1-9])$ ]]; do
+        echo "$client_ip: 无效的 IP，必须在 10.8.0.2 - 10.8.0.254 范围内。"
+        read -p "固定 IP [10.8.0.2]: " client_ip
+    done
+    [[ -z "$client_ip" ]] && client_ip="10.8.0.2"
     echo
     echo "OpenVPN 安装即将开始。"
     # 检查并安装防火墙
@@ -210,7 +217,7 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
         fi
     fi
     read -n1 -r -p "按任意键继续..."
-    # 如果在容器中运行，禁用 LimitNPROC
+    # 容器中禁用 LimitNPROC
     if systemd-detect-virt -cq; then
         mkdir /etc/systemd/system/openvpn-server@server.service.d/ 2>/dev/null
         echo "[Service]
@@ -231,7 +238,7 @@ LimitNPROC=infinity" > /etc/systemd/system/openvpn-server@server.service.d/disab
     fi
     # 获取 EasyRSA，适配中国网络环境
     easy_rsa_url='https://github.com/OpenVPN/easy-rsa/releases/download/v3.2.2/EasyRSA-3.2.2.tgz'
-    easy_rsa_mirror='https://ghproxy.com/https://github.com/OpenVPN/easy-rsa/releases/download/v3.2.2/EasyRSA-3.2.2.tgz' # 国内镜像
+    easy_rsa_mirror='https://ghproxy.com/https://github.com/OpenVPN/easy-rsa/releases/download/v3.2.2/EasyRSA-3.2.2.tgz'
     mkdir -p /etc/openvpn/server/easy-rsa/
     if ! { wget -qO- "$easy_rsa_mirror" 2>/dev/null || curl -sL "$easy_rsa_mirror" ; } | tar xz -C /etc/openvpn/server/easy-rsa/ --strip-components 1; then
         if ! { wget -qO- "$easy_rsa_url" 2>/dev/null || curl -sL "$easy_rsa_url" ; } | tar xz -C /etc/openvpn/server/easy-rsa/ --strip-components 1; then
@@ -264,7 +271,8 @@ YdEIqUuyyOP7uWrat2DX9GgdT0Kj3jlN9K5W7edjcrsZCwenyO4KbXCeAvzhzffi
 7MA0BM0oNC9hkXL+nOmFg/+OTxIy7vKBg8P+OxtMb61zO7X8vC7CIAXFjvGDfRaD
 ssbzSibBsu/6iGtCOGEoXJf//////////wIBAg==
 -----END DH PARAMETERS-----' > /etc/openvpn/server/dh.pem
-    # 生成 server.conf
+    # 生成 server.conf，启用客户端固定 IP
+    mkdir -p /etc/openvpn/server/ccd
     echo "local $ip
 port $port
 proto $protocol
@@ -276,7 +284,8 @@ dh dh.pem
 auth SHA512
 tls-crypt tc.key
 topology subnet
-server 10.8.0.0 255.255.255.0" > /etc/openvpn/server/server.conf
+server 10.8.0.0 255.255.255.0
+client-config-dir /etc/openvpn/server/ccd" > /etc/openvpn/server/server.conf
     if [[ -z "$ip6" ]]; then
         echo 'push "redirect-gateway def1 bypass-dhcp"' >> /etc/openvpn/server/server.conf
     else
@@ -328,6 +337,8 @@ crl-verify crl.pem" >> /etc/openvpn/server/server.conf
     if [[ "$protocol" = "udp" ]]; then
         echo "explicit-exit-notify" >> /etc/openvpn/server/server.conf
     fi
+    # 为第一个客户端创建固定 IP 配置
+    echo "ifconfig-push $client_ip 255.255.255.0" > /etc/openvpn/server/ccd/"$client"
     # 启用 IP 转发
     echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-openvpn-forward.conf
     echo 1 > /proc/sys/net/ipv4/ip_forward
@@ -335,7 +346,7 @@ crl-verify crl.pem" >> /etc/openvpn/server/server.conf
         echo "net.ipv6.conf.all.forwarding=1" >> /etc/sysctl.d/99-openvpn-forward.conf
         echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
     fi
-    # 配置防火墙
+    # 配置防火墙（保持不变）
     if systemctl is-active --quiet firewalld.service; then
         firewall-cmd --add-port="$port"/"$protocol"
         firewall-cmd --zone=trusted --add-source=10.8.0.0/24
@@ -381,14 +392,13 @@ ExecStop=$ip6tables_path -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCE
 WantedBy=multi-user.target" >> /etc/systemd/system/openvpn-iptables.service
         systemctl enable --now openvpn-iptables.service
     fi
-    # 如果 SELinux 启用且端口非默认，调整端口权限
+    # SELinux 端口调整（保持不变）
     if sestatus 2>/dev/null | grep "Current mode" | grep -q "enforcing" && [[ "$port" != 1194 ]]; then
         if ! hash semanage 2>/dev/null; then
             dnf install -y policycoreutils-python-utils
         fi
         semanage port -a -t openvpn_port_t -p "$protocol" "$port"
     fi
-    # 如果服务器在 NAT 后面，使用公网 IP
     [[ -n "$public_ip" ]] && ip="$public_ip"
     # 创建客户端模板文件
     echo "client
@@ -411,6 +421,7 @@ verb 3" > /etc/openvpn/server/client-common.txt
     echo "安装完成！"
     echo
     echo "客户端配置文件位于:" ~/"$client.ovpn"
+    echo "客户端 $client 的固定 IP 为: $client_ip"
     echo "可再次运行此脚本添加新客户端。"
 else
     clear
@@ -429,19 +440,28 @@ else
     case "$option" in
         1)
             echo
-            echo "请输入客户端名称："
+            echo "请输入新客户端的名称："
             read -p "名称: " unsanitized_client
             client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
             while [[ -z "$client" || -e /etc/openvpn/server/easy-rsa/pki/issued/"$client".crt ]]; do
-                echo "$client: 无效的名称。"
+                echo "$client: 无效的名称或已存在。"
                 read -p "名称: " unsanitized_client
                 client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
             done
+            echo
+            echo "请输入 $client 的固定 IP 地址（范围: 10.8.0.2 - 10.8.0.254）："
+            read -p "固定 IP: " client_ip
+            until [[ "$client_ip" =~ ^10\.8\.0\.(2[0-4][0-9]|25[0-4]|[3-9][0-9]|[1-9])$ ]]; do
+                echo "$client_ip: 无效的 IP，必须在 10.8.0.2 - 10.8.0.254 范围内。"
+                read -p "固定 IP: " client_ip
+            done
             cd /etc/openvpn/server/easy-rsa/
             ./easyrsa --batch --days=3650 build-client-full "$client" nopass
+            echo "ifconfig-push $client_ip 255.255.255.0" > /etc/openvpn/server/ccd/"$client"
             new_client
             echo
             echo "$client 已添加。配置文件位于:" ~/"$client.ovpn"
+            echo "客户端 $client 的固定 IP 为: $client_ip"
             exit
         ;;
         2)
@@ -473,6 +493,7 @@ else
                 rm -f /etc/openvpn/server/crl.pem
                 cp /etc/openvpn/server/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem
                 chown nobody:"$group_name" /etc/openvpn/server/crl.pem
+                rm -f /etc/openvpn/server/ccd/"$client"
                 echo
                 echo "$client 已吊销！"
             else
@@ -516,12 +537,11 @@ else
                 systemctl disable --now openvpn-server@server.service
                 rm -f /etc/systemd/system/openvpn-server@server.service.d/disable-limitnproc.conf
                 rm -f /etc/sysctl.d/99-openvpn-forward.conf
+                rm -rf /etc/openvpn/server
                 if [[ "$os" = "debian" || "$os" = "ubuntu" ]]; then
-                    rm -rf /etc/openvpn/server
                     apt-get remove --purge -y openvpn
                 else
                     dnf remove -y openvpn
-                    rm -rf /etc/openvpn/server
                 fi
                 echo
                 echo "OpenVPN 已删除！"
